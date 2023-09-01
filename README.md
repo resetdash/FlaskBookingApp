@@ -13,7 +13,7 @@ This application requires the following to run:
 2. Create a new user account called "is213" with no password in phpMyadmin. This account needs to have all the privileges classified under "Data, Structures and Administration" (e.g select, insert etc)
 3. Load all included sql files found in the "data" folder
 
-To run the solution:
+To run the app:
 1. open cmd and navigate to the "program" folder directory
 2. run docker-compose build
 3. run docker-compose up
