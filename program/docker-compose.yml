@@ -1,0 +1,125 @@
+version: "3.8"
+
+volumes:
+  rabbitmq_data:
+
+services:
+ 
+  ###################################
+  # Booking: The Booking microservice
+  ###################################
+  booking:
+    build:
+      context: ./
+      dockerfile: booking.Dockerfile
+    image: danielw2019/booking:esdG2T6
+    restart: always
+    environment:
+      dbURL: mysql+mysqlconnector://is213@host.docker.internal:3306/booking_db
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "5000:5000"
+  #######################################################
+  # Inventory: The Inventory microservice
+  #######################################################
+  inventory:
+    build:
+      context: ./
+      dockerfile: inventory.Dockerfile
+    image: danielw2019/inventory:esdG2T6
+    restart: always
+    environment:
+      dbURL: mysql+mysqlconnector://is213@host.docker.internal:3306/inventory
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "5010:5010"
+        
+      #to print any print statements in python to the terminal instead of buffering them
+
+  #######################################################
+  # Patient: The Patient microservice
+  #######################################################
+  patient:
+    build:
+      context: ./
+      dockerfile: patient.Dockerfile
+    image: danielw2019/patient:esdG2T6
+    restart: always
+    environment:
+      dbURL: mysql+mysqlconnector://is213@host.docker.internal:3306/patient_db
+      PYTHONUNBUFFERED: 1
+      #to print any print statements in python to the terminal instead of buffering them
+
+  #######################################################
+  # Doctor: The Doctor microservice
+  #######################################################
+  doctor:
+    build:
+      context: ./
+      dockerfile: doctor.Dockerfile
+    image: danielw2019/doctor:esdG2T6
+    restart: always
+    environment:
+      dbURL: mysql+mysqlconnector://is213@host.docker.internal:3306/doctor_db
+      PYTHONUNBUFFERED: 1
+    ports:
+        - "4848:4848"
+      #to print any print statements in python to the terminal instead of buffering them      
+
+  ####################################
+  # RabbitMQ: The messaging broker   
+  ####################################
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: esd-G2T6-rabbit
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes: 
+      - rabbitmq_data:/var/lib/rabbitmq
+      
+  #################################################
+  # Patient Noti: The Patient Notification microservice
+  #################################################
+  patient_noti:
+    build:
+      context: ./
+      dockerfile: patient_noti.Dockerfile
+    image: danielw2019/patient_noti:esdG2T6
+    restart: always
+    depends_on:
+      - rabbitmq
+    environment:
+      rabbit_host: rabbitmq
+      rabbit_port: 5672
+      PYTHONUNBUFFERED: 1
+
+
+  ###############################################
+  # Booking Manager: The Booking Manager microservice
+  ###############################################
+  booking_manager:
+    build:
+      context: ./
+      dockerfile: booking_manager.Dockerfile
+    image: danielw2019/booking_manager:esdG2T6
+    restart: always
+    depends_on:
+      - booking
+      - inventory
+      - patient
+      - doctor
+      - patient_noti
+      - rabbitmq
+    environment:
+      rabbit_host: rabbitmq
+      rabbit_port: 5672
+      booking_URL: http://booking:5000/booking
+      inventory_URL: http://inventory:5010/inventory 
+      patient_URL: http://patient:3737/patient
+      doctor_URL: http://doctor:4848/doctor
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "5727:5727"
+

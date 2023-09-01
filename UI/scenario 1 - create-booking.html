@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>G2T6 Scenario 1</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+</head>
+<script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+
+<body>
+    <div id="app" class="container">
+        <h1 style="margin-top: 5%;">Book a consultation</h1>
+        <div class="row" v-show="!bookingPlaced">
+            <div id="main" class="col-12">
+                Type your username: <input id="username" v-model="username" placeholder="Username"><br>
+
+                <table class="table table-striped " v-if="hasTime">
+                    <!-- <table class="table table-striped"> -->
+                    <thead>
+                        <tr>
+                            <th style="text-align: center;">Time</th>
+                            <th>Book Consultation</th>
+                        </tr>
+                        <tr v-for="time in times">
+                            <td style="text-align: center;">{{ time }}</td>
+                            <td><button @click="makeBooking(time,username)" type="button" class="btn btn-primary">Make
+                                    Booking</button>
+                            </td>
+
+                        </tr>
+                    </thead>
+                </table>
+                <div class="text-danger" v-if="!hasTime">{{ message }}</div>
+            </div> <!-- main & col -->
+        </div> <!-- row -->
+        <div id="make_booking" v-show="bookingPlaced">
+
+            <div class="text-success" v-if="bookingSuccessful">
+                The booking has been successfully placed! <br>
+                <div id="booking_message">{{ bookingMessage }}</div><br>
+
+            </div>
+            <div class="text-danger" v-else>
+                There is a problem with placing this order, please check with the store for more details.<br>
+                <br>
+            </div>
+            <button @click="bookingPlaced = false; bookingSuccessful = false; getAllTimes()"
+                class="btn btn-primary">Return to home
+                page</button>
+        </div> <!-- place order -->
+    </div> <!-- app: container -->
+
+    <script>
+        var get_all_URL = "http://localhost:4848/doctor/availabletimes";
+        var make_booking_URL = "http://localhost:5727/booking_manager";
+
+        var app = new Vue({
+            el: "#app",
+            computed: {
+                hasTime: function () {
+                    return true;
+                }
+            },
+            data: {
+                username: "",
+                "times": [],
+                "book": [],
+                message: "There is a problem retrieving books data, please try again later.",
+
+                bookingPlaced: false,
+                bookingSuccessful: false,
+                bookingMessage: "",
+            },
+
+            methods: {
+                getAllTimes: function () {
+                    // on Vue instance created, load the book list
+                    const response =
+                        fetch(get_all_URL)
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log(response);
+                            if (data.code === 404) {
+                                // no available time
+                                this.message = data.message;
+                            } else {
+                                this.times = data.data.Available_timeslots.sort();
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+                        });
+
+
+                },
+
+                makeBooking: function (time, username) {
+
+                    // use this to trigger an error
+                    // "customer_id": "ERROR",
+                    var months_object = {
+                        "Jan": "01",
+                        "Feb": "02",
+                        "Mar": "03",
+                        "Apr": "04",
+                        "May": "05",
+                        "Jun": "06",
+                        "Jul": "07",
+                        "Aug": "08",
+                        "Sep": "09",
+                        "Oct": "10",
+                        "Nov": "11",
+                        "Dec": "12"
+                    };
+                    this.selectedTime = time;
+                    format1 = time.slice(5, (time.length - 4));
+                    year = format1.slice(7, 11);
+                    month_str = format1.slice(3, 6);
+                    month_number = months_object[month_str]
+                    day = format1.slice(0, 2);
+                    timing = format1.slice(12, format1.length);
+
+
+                    timing_request = year + "-" + month_number + "-" + day + " " + timing;
+
+                    console.log(document.getElementById("username").value)
+                    console.log(timing_request);
+
+
+                    fetch(make_booking_URL, {
+                            method: "POST",
+                            headers: {
+                                "Content-type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                "username": document.getElementById("username").value,
+                                "selected_time": timing_request
+
+                            })
+                        })
+
+
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log(data);
+                            result = data.data;
+                            console.log(result);
+                            // 3 cases
+                            switch (data.code) {
+                                case 201:
+                                    // 201
+                                    this.bookingSuccessful = true;
+                                    bookingMessage =
+                                        `Booking results: ${result.booking_details.code} - Success!
+                                        Booking ID: ${result.booking_details.data.booking_id},
+                                        Doctor ID: ${result.booking_details.data.doctor_id},
+                                        Date: ${result.booking_details.data.consultation_date}`;
+                                    this.bookingMessage = bookingMessage;
+                                    break;
+
+                                case 400:
+                                    // 400 
+                                    this.bookingSuccessful = true;
+                                    bookingMessage =
+                                        `Booking placed
+                                        Booking Result:
+                                        ${result.order_result.code}:${result.order_result.data.status}
+
+                                        Shipping Result:
+                                        ${result.shipping_result.code}:${result.shipping_result.message}
+
+                                        Error handling:
+                                        ${data.message}`;
+                                    break;
+                                case 500:
+                                    // 500 
+                                    bookingMessage =
+                                        `Booking placed with error:
+                                        Booking Result:
+                                        ${result.order_result.code}:${result.order_result.message}
+
+                                        Error handling:
+                                        ${data.message}`;
+                                    break;
+                                default:
+                                    bookingMessage = `Unexpected error: ${data.code}`;
+                                    console.log(`Unknown error code : ${data.code}`);
+                                    break;
+
+                            } // switch
+                            console.log(bookingMessage);
+                            this.bookingPlaced = true;
+                        })
+                        .catch(error => {
+                            console.log("Problem in placing an order. " + error);
+                        })
+
+                }
+            },
+            created: function () {
+                // on Vue instance created, load the book list
+                this.getAllTimes();
+            }
+        });
+    </script>
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous">
+    </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous">
+    </script>
+</body>
+
+</html>

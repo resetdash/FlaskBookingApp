@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Update consultation</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+</head>
+<script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+
+<body>
+    <div id="app" class="container">
+        <h1>Consultation Details</h1>
+        <div class="row" v-show="!paymentSuccessful">
+            <div id="main" class="col-8">
+                Search by doctor id: <input v-model="doctor_id" placeholder="Doctor ID">
+                <button @click="findBookings()" type="button" class="my-1 btn btn-sm btn-primary">Search</button><br>
+
+                <table class="table table-striped" v-if="hasbookings">
+                    <!-- <table class="table table-striped"> -->
+                    <thead>
+                        <tr>
+                            <th>Booking id</th>
+                            <th>Patient id</th>
+                            <th>Dcotor id</th>
+                            <th>Date Time</th>
+                            <th>Payment Status</th>
+                            <th>Consultation Details</th>
+                            <th style="width: 50%">Prescription</th>
+                        </tr>
+                        <tr v-for="(booking, index) in bookings">
+                            <td>{{ booking.booking_id }}</td>
+                            <td>{{ booking.patient_id }}</td>
+                            <td>{{ booking.doctor_id }}</td>
+                            <td>{{ booking.consultation_date }}</td>
+                            <td>{{ booking.payment_status }}</td>
+                            <td>{{ booking.consultation_details }}</td>
+                            <td style="width: 50%">{{ drug_details_table[index]}}</td>
+
+                            </td>
+
+                        </tr>
+                    </thead>
+                </table>
+                <div class="text-danger" v-if="findError!=''">
+                    {{findError}}
+                    <br>
+                </div>
+            </div> <!-- main & col -->
+            <div class="col-4" v-if="hasbookings">
+                <h2>Add prescription</h2>
+                <div class="form-group">
+                    <label for="booking">Booking id</label>
+                    <input v-model="booking_id" type="text" class="form-control" id="booking"
+                        placeholder="Enter Booking id">
+                </div>
+                <div class="form-group">
+                    <label for="item">Item Name</label>
+                    <br>
+                    <select class="form-group" v-model="item_id" :required="true" id="item">
+                        <option disabled value="">Choose Drug</option>
+                        <option v-for="drug in all_drugs" v-bind:value="drug.ItemID">{{ drug.ItemName }}</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="quantity">Quantity</label>
+                    <input v-model="quantity" type="number" class="form-control" id="quantity" min=1
+                        placeholder="Enter Quantity">
+                </div>
+                <button @click="addDrugs(booking_id)" class="btn btn-primary" v-on:submit.prevent="onSubmit">Add
+                    prescription</button>
+                <div class="text-success" v-if="drugAdded">
+                    The prescription has been added <br>
+                    <br>
+                </div>
+                <div class="text-danger" v-if="addDrugError!=''">
+                    There is a problem adding new drug details:<br>
+                    {{ addDrugError}}
+                    <br>
+                </div>
+            </div>
+        </div>
+        <div class="row justify-content-end" v-if="hasbookings">
+            <div class="col-4">
+                <br>
+                <h2>Update consultation details</h2>
+                <div class="form-group">
+                    <label for="booking_id">Booking id</label>
+                    <input v-model="booking_id" type="text" class="form-control" id="booking_id"
+                        placeholder="Enter Booking id">
+                </div>
+                <div class="form-group">
+                    <label for="quantity">Consultation Details</label>
+                    <input v-model="consultation_details" type="type" class="form-control" id="consultation_details"
+                        placeholder="Enter consultation details">
+                </div>
+                <button @click="updateConsultation(booking_id)" class="btn btn-primary"
+                    v-on:submit.prevent="onSubmit">Update
+                    consultation details</button>
+                <div class="text-success" v-if="detailsAdded">
+                    The consultation details has been added <br>
+                    <br>
+                </div>
+                <div class="text-danger" v-if="addDetailsError!=''">
+                    There is a problem adding new consultation details:<br>
+                    {{ addDetailsError}}
+                    <br>
+                </div>
+            </div>
+            <!-- col -->
+        </div>
+
+    </div> <!-- app: container -->
+
+    <script>
+        var get_doctor_bookings = "http://localhost:5000/booking/unpaid/doctor/";
+        var create_drug_url = "http://localhost:5000/booking/drug";
+        var update_consultation_url = "http://localhost:5000/booking/updatecon/";
+
+        var get_total_URL = "http://localhost:5727/booking_manager/price/";
+        var all_drugs_url = "http://localhost:5010/inventory";
+
+        var app = new Vue({
+            el: "#app",
+            computed: {
+                hasbookings: function () {
+                    return this.bookings.length > 0;
+                }
+
+            },
+            data: {
+                "drug_details_table": [],
+                "bookings": [],
+                "all_drugs": [],
+                message: "",
+                booking_id: "",
+                item_id: "",
+                quantity: "",
+                doctor_id: "",
+                consultation_details: "",
+                consultation_date: "",
+                drugAdded: false,
+                detailsAdded: false,
+                paymentSuccessful: false,
+                selected: "",
+                addDrugError: "",
+                findError: "",
+                addDetailsError: ""
+
+            },
+            methods: {
+                findBookings: function () {
+                    this.findError = "";
+                    if (this.drug_details_table.length > 0) {
+                        this.drug_details_table = []
+                        this.totals = []
+                    }
+                    this.addDetailsError = "";
+                    this.addDrugError = "";
+                    const response =
+                        fetch(get_doctor_bookings + this.doctor_id)
+                        .then(response => response.json())
+                        .then(data => {
+                            //console.log(response);
+                            if (data.code === 404) {
+                                // no book in db
+                                this.findError = "There are no bookings to update";
+                                this.bookings = [];
+                            } else {
+                                this.bookings = data.data.bookings;
+
+                                //console.log(data.data.bookings)
+                                for (i = 0; i < this.bookings.length; i++) {
+                                    var drug_details = this.bookings[i].drug_details_table
+                                    for (items in drug_details) {
+                                        delete drug_details[items]["booking_id"];
+                                        delete drug_details[items]["details_id"];
+                                    }
+                                    result = Object.keys(drug_details).reduce(function (r, k) {
+                                        return r.concat(k, drug_details[k]);
+                                    }, []);
+
+                                    this.drug_details_table.push(drug_details)
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                findDrugs: function () {
+                    const response =
+                        fetch(all_drugs_url)
+                        .then(response => response.json())
+                        .then(data => {
+                            //console.log(response);
+                            if (data.code === 404) {
+                                // no book in db
+                                this.message = data.message;
+                                this.all_drugs = [];
+                            } else {
+                                //console.log(data.data.items)
+                                this.all_drugs = data.data.items;
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                updateConsultation: function (booking_id) {
+                    this.detailsAdded = false;
+                    this.addDetailsError = "";
+                    //console.log(typeof (booking_id))
+                    let jsonData = JSON.stringify({
+                        consultation_details: this.consultation_details
+                    });
+                    //console.log(jsonData);
+                    //console.log(update_consultation_url + booking_id)
+                    fetch(update_consultation_url + booking_id, {
+                            method: "PUT",
+                            headers: {
+                                "Content-type": "application/json"
+                            },
+                            body: jsonData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            result = data.data;
+                            //console.log(result);
+                            // 3 cases
+                            switch (data.code) {
+                                case 201:
+                                    console.log(result)
+                                    this.consultation_details = "";
+                                    this.detailsAdded = true;
+                                    this.findBookings(this.doctor_id);
+                                    break;
+                                case 500:
+                                    this.addDetailsError = data.message;
+                                    break;
+
+                                default:
+                                    //orderMessage = `Unexpected error: ${data.code}`;
+                                    console.log(`Unknown error code : ${data.code}`);
+                                    break;
+                            } // switch
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                addDrugs: function (booking_id) {
+                    this.drugAdded = false;
+                    this.addDrugError = "";
+                    quantity = parseInt(this.quantity);
+                    if (quantity < 1) {
+                        this.addDrugError = "Please enter a valid quantity of more than 1";
+                        return;
+                    }
+
+
+                    //console.log(typeof (booking_id))
+                    let jsonData = JSON.stringify({
+                        booking_id: parseInt(booking_id),
+                        item_id: this.item_id,
+                        quantity: quantity
+                    });
+                    console.log(jsonData)
+                    fetch(create_drug_url, {
+                            method: "POST",
+                            headers: {
+                                "Content-type": "application/json"
+                            },
+                            body: jsonData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            result = data.data;
+                            //console.log(result);
+                            // 3 cases
+                            switch (data.code) {
+                                case 201:
+                                    //console.log(result.total)
+                                    this.item_id = "";
+                                    this.quantity = "";
+                                    this.drugAdded = true;
+                                    this.findBookings(this.doctor_id);
+                                    break;
+
+                                case 500:
+                                    this.addDrugError = data.message;
+                                    break;
+                                default:
+                                    //orderMessage = `Unexpected error: ${data.code}`;
+                                    console.log(`Unknown error code : ${data.code}`);
+                                    break;
+                            } // switch
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+                        });
+
+                }
+            },
+            created: function () {
+                // on Vue instance created, load the book list
+                this.findDrugs();
+            }
+        });
+    </script>
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous">
+    </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous">
+    </script>
+</body>
+
+</html>

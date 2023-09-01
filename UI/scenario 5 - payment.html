@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Payment</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+</head>
+<script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+
+<body>
+    <div id="app" class="container">
+        <h1>Payment</h1>
+        <div class="row">
+            <div id="main" class="col-8">
+                Search by patient id: <input v-model="patient_id" placeholder="Patient ID">
+                <button @click="findBookings()" type="button" class="my-1 btn btn-sm btn-primary">Search</button><br>
+
+                <table class="table table-striped" v-if="hasbookings">
+                    <!-- <table class="table table-striped"> -->
+                    <thead>
+                        <tr>
+                            <th>Booking id</th>
+                            <th>Patient id</th>
+                            <th>Date Time</th>
+                            <th colspan="3">Prescription</th>
+                            <th>Total</th>
+                            <th>Payment Status</th>
+                            <th colspan="3"></th>
+                        </tr>
+                        <tr v-for="(booking, index) in bookings">
+                            <td>{{ booking.booking_id }}</td>
+                            <td>{{ booking.patient_id }}</td>
+                            <td>{{ booking.consultation_date }}</td>
+                            <td colspan="3">{{ drug_details_table[index]}}</td>
+                            <td>{{ totals[index]}}</td>
+                            <td>{{ booking.payment_status }}</td>
+                            <td colspan="3">
+                                <div class="paypal-button" v-bind:id="booking.booking_id"
+                                    v-bind:data-total="totals[index]">
+                                </div>
+                            </td>
+
+                        </tr>
+                    </thead>
+                </table>
+                <div v-if="totals.length != 0 && totals.length === drug_details_table.length && !paymentExist">
+                    <button @click="generateButton()" type="button" class="btn btn-primary float-right"
+                        id="payment">Pay</button>
+                </div>
+                <div class="text-success" v-if="paymentSuccessful">
+                    Payment was successful for booking {{ booking_id}}<br>
+                    <br>
+                </div>
+                <div class="text-danger" v-if="paymentError!=''">
+                    There is a problem with the payment:<br>
+                    {{ paymentError}}
+                    <br>
+                </div>
+                <div class="text-success" v-if="searchError!=''">
+                    {{ searchError}}
+                    <br>
+                </div>
+
+            </div> <!-- main & col -->
+        </div>
+
+    </div> <!-- app: container -->
+
+    <script>
+        var get_all_unpaid = "http://localhost:5000/booking/unpaid/";
+        var get_total_URL = "http://localhost:5727/booking_manager/price/";
+        var update_booking_URL = "http://localhost:5000/booking/updatepay/";
+        var update_stock_URL = "http://localhost:5727/booking_manager/stock/";
+
+        var app = new Vue({
+            el: "#app",
+            computed: {
+                hasbookings: function () {
+                    return this.bookings.length > 0;
+                }
+
+            },
+            data: {
+                "drug_details_table": [],
+                "bookings": [],
+                message: "There is a problem retrieving booking data, please try again later.",
+                booking_id: "",
+                patient_id: "",
+                DoctorID: "",
+                consultation_date: "",
+                payment_status: "",
+                paymentSuccessful: false,
+                paymentExist: false,
+                searchError: "",
+                paymentError: "",
+                "totals": []
+
+            },
+            methods: {
+                getTotal: function (booking_id) {
+                    //console.log(bill)
+                    // use this to trigger an error
+                    // "customer_id": "ERROR",
+                    //console.log(this.drug_details_table[index])
+                    //bill = this.drug_details_table[index]
+                    fetch(get_total_URL + booking_id)
+                        .then(response => response.json())
+                        .then(data => {
+                            result = data.data;
+                            //console.log(result);
+                            // 3 cases
+                            switch (data.code) {
+                                case 200:
+                                    //200
+                                    //console.log(result.total)
+
+                                    this.totals.push(result.total);
+                                    break;
+                                default:
+                                    //orderMessage = `Unexpected error: ${data.code}`;
+                                    console.log(`Unknown error code : ${data.code}`);
+                                    break;
+
+                            } // switch
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                findBookings: function () {
+                    this.searchError = "";
+                    paypalButton = document.getElementsByClassName("paypal-button")
+                    paymentButton = document.getElementById("payment")
+                    if (paymentButton && paypalButton.length === 0) {
+                        this.paymentExist = false
+                    }
+
+                    if (this.drug_details_table.length > 0) {
+                        this.drug_details_table = []
+                        this.totals = []
+                    }
+
+                    const response =
+                        fetch(`${get_all_unpaid}/${this.patient_id}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            //console.log(response);
+                            if (data.code === 404) {
+                                // no book in db
+                                this.searchError = data.message;
+                                this.bookings = [];
+                            } else {
+                                this.bookings = data.data.bookings;
+                                //console.log(data.data.bookings)
+                                for (i = 0; i < this.bookings.length; i++) {
+                                    var drug_details = this.bookings[i].drug_details_table
+                                    for (items in drug_details) {
+                                        delete drug_details[items]["booking_id"];
+                                        delete drug_details[items]["details_id"];
+                                    }
+                                    result = Object.keys(drug_details).reduce(function (r, k) {
+                                        return r.concat(k, drug_details[k]);
+                                    }, []);
+
+                                    this.drug_details_table.push(drug_details)
+                                }
+                                this.bookings.forEach(booking => this.getTotal(booking.booking_id));
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                updatePayment: function (booking_id) {
+                    //console.log(typeof (booking_id))
+                    this.paymentSuccessful = false;
+                    this.paymentError = "";
+                    let jsonData = JSON.stringify({
+                        payment_status: "PAID"
+                    });
+                    fetch(update_booking_URL + booking_id, {
+                            method: "PUT",
+                            headers: {
+                                "Content-type": "application/json"
+                            },
+                            body: jsonData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            result = data.data;
+                            //console.log(result);
+                            // 3 cases
+                            switch (data.code) {
+                                case 201:
+                                    //200
+                                    //console.log(result.total)
+                                    this.paymentSuccessful = true;
+                                    this
+                                    this.findBookings();
+                                    break;
+
+                                default:
+                                    //orderMessage = `Unexpected error: ${data.code}`;
+                                    console.log(`Unknown error code : ${data.code}`);
+                                    this.paymentError = data.message;
+                                    break;
+                            } // switch
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                updateStock: function (booking_id) {
+                    const response =
+                        fetch(update_stock_URL + booking_id)
+                        .then(response => response.json())
+                        .then(data => {
+                            //console.log(response);
+                            if (data.code === 404) {
+                                // no book in db
+                                this.searchError = data.message;
+                            } else {
+                                console.log(data.data.items);
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                generateButton: function () {
+                    var ref = this
+                    ref.paymentExist = true
+                    document.querySelectorAll('.paypal-button').forEach(function (selector) {
+                        var x = document.getElementById(selector.id)
+                        //console.log(x.dataset.total)
+                        $cost = x.dataset.total;
+
+                        paypal.Button.render({
+                            // Configure environment
+                            env: 'sandbox',
+                            client: {
+                                sandbox: 'AVu-OcRH3_UjTiVeWZfyHab2xoiLIY67JxI5cvcCCjTlkv5_j5y6oE_DzP6aYStqD57VEzAgDF_Fy8He',
+                                production: 'demo_production_client_id'
+                            },
+                            // Customize button (optional)
+                            locale: 'en_US',
+                            style: {
+                                size: 'small',
+                                color: 'gold',
+                                shape: 'pill',
+                            },
+
+                            // Enable Pay Now checkout flow (optional)
+                            commit: true,
+
+                            //Set up a payment
+                            payment: function (data, actions) {
+                                return actions.payment.create({
+                                    transactions: [{
+                                        amount: {
+                                            total: $cost,
+                                            currency: 'SGD'
+                                        }
+                                    }]
+                                });
+                            },
+
+                            //Execute the payment
+                            onAuthorize: function (data, actions) {
+                                ref.paymentSuccessful = false;
+                                //console.log(data)
+                                return actions.payment.execute().then(function () {
+                                    // Show a confirmation message to the buyer
+                                    window.alert(
+                                        'Payment Completed!');
+                                    ref.paymentSuccessful = true;
+                                    ref.updatePayment(selector.id);
+                                    ref.updateStock(selector.id);
+                                });
+
+                            }
+                        }, selector);
+                    });
+                }
+
+            }
+        });
+    </script>
+    <script src="https://www.paypalobjects.com/api/checkout.js"></script>
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous">
+    </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous">
+    </script>
+</body>
+
+</html>

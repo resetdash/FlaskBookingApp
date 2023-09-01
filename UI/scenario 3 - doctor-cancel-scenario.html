@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Booking Cancellation</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+</head>
+<script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+
+<body>
+    <div id="app" class="container">
+        <h1>Booking Details</h1>
+        <div class="row">
+            <div id="main" class="col-8">
+                Enter doctor id: <input v-model="doctor_id" placeholder="doctor id">
+                <button @click="findBookings()" type="button" class="my-1 btn btn-sm btn-primary">Search</button><br>
+
+                <table class="table table-striped" v-if="hasbookings">
+                    <!-- <table class="table table-striped"> -->
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Booking id</th>
+                            <th>Patient id</th>
+                            <th>Doctor id</th>
+                            <th style="width: 25%">Date Time</th>
+                            <th style="width: 25%">Booking Status</th>
+                        </tr>
+                        <tr v-for="(booking, index) in bookings">
+                            <td><input type="radio" v-bind:id="booking.booking_id" name="booking"
+                                    v-bind:value="booking.booking_id" v-model="booking_id">
+                            </td>
+                            <td><label v-bind:for="booking.booking_id"></label>{{ booking.booking_id }}</td></label>
+                            <td>{{ booking.patient_id }}</td>
+                            <td>{{ booking.doctor_id }}</td>
+                            <td style="width: 25%">{{ booking.consultation_date }}</td>
+                            <td>{{ booking.payment_status }}</td>
+                            </td>
+                        </tr>
+                    </thead>
+                </table>
+
+                <div>
+                    <button @click="confirmCancel()" v-if="hasbookings" class="btn btn-danger float-right"
+                        v-on:submit.prevent="onSubmit">
+                        Cancel booking</button>
+                </div>
+                <!-- col -->
+                <div class="text-success" v-if="cancelSuccessful">
+                    {{ message}}
+                    <br>
+                </div>
+                <div class="text-danger" v-if="!findBooking">
+                    {{ message}}
+                    <br>
+                </div>
+            </div>
+
+        </div> <!-- app: container -->
+    </div>
+    <script>
+        var cancel_booking_url = "http://localhost:5727/booking_manager/doctor_request_cancel/";
+        var doctor_confirm_url = "http://localhost:5727/booking_manager/doctor_cancel/";
+
+
+        var app = new Vue({
+            el: "#app",
+            computed: {
+                hasbookings: function () {
+                    return JSON.stringify(this.bookings) != '[]';
+                }
+            },
+            data: {
+                "bookings": [],
+                message: "There is a problem retrieving booking data, please try again later.",
+                booking_id: "",
+                doctor_id: "",
+                canceled_booking_id: "",
+                payment_status: "",
+                cancelSuccessful: false,
+                findBooking: true,
+                cancelError: ""
+
+            },
+            methods: {
+                findBookings: function () {
+                    this.message = ""
+                    this.findBooking = true;
+                    this.bookings = [];
+                    const response =
+                        fetch(cancel_booking_url + this.doctor_id)
+                        .then(response => response.json())
+                        .then(data => {
+                            //console.log(response);
+                            if (data.code === 404) {
+                                // no book in db
+                                this.findBooking = false;
+                                this.message = data.message;
+                                this.bookings = [];
+                            } else {
+                                this.bookings = data.data.bookings;
+                                for (items in this.bookings) {
+                                    date = this.bookings[items].consultation_date
+                                    this.bookings[items].consultation_date = date.slice(0, -7)
+                                }
+
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                },
+                confirmCancel: function () {
+                    this.cancelSuccessful = false
+                    const response =
+                        fetch(doctor_confirm_url + this.booking_id)
+                        .then(response => response.json())
+                        .then(data => {
+                            //console.log(response);
+                            if (data.code === 404) {
+                                // some error
+                                this.message = data.message;
+                            } else {
+                                this.bookings = data.data.booking_result;
+                                this.message = data.message;
+                                this.canceled_booking_id = this.booking_id;
+                                this.booking_id = "";
+                                this.bookings = [];
+                                this.cancelSuccessful = true;
+                            }
+                        })
+                        .catch(error => {
+                            // Errors when calling the service; such as network error, 
+                            // service offline, etc
+                            console.log(this.message + error);
+
+                        });
+
+                }
+
+            }
+        });
+    </script>
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous">
+    </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous">
+    </script>
+</body>
+
+</html>
